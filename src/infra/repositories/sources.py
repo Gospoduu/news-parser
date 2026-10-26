@@ -17,6 +17,15 @@ class SourcesRepository(BaseRepository):
         )
         return [self.from_row(row) for row in result.fetchall()]
 
+    async def get_by_id(
+        self, connection: AsyncConnection, source_id: int
+    ) -> Source | None:
+        result = await connection.execute(
+            select(self.model).where(self.model.c.id == source_id)
+        )
+        row = result.fetchone()
+        return self.from_row(row) if row is not None else None
+
     async def disable(
         self, connection: AsyncConnection, source_id: int
     ) -> Source | None:

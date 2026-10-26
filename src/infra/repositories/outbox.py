@@ -7,6 +7,7 @@ from sqlalchemy.types import Interval
 
 from src.infra.models.public import outbox
 from src.infra.schemas.news import News
+from src.infra.schemas.sources import Source
 
 
 class OutboxRepository:
@@ -16,16 +17,22 @@ class OutboxRepository:
         source_id: int,
         article_ids: list[int],
         articles: list[News],
+        source: Source | None = None,
     ) -> None:
         if not article_ids or len(article_ids) != len(articles):
             raise ValueError("Outbox batch must contain matching article IDs and articles")
         event_id = uuid4()
         payload = {
             'event_id': str(event_id),
-            'event_type': 'news.batch_created',
+            'event_type': 'news.parsed.v1',
             'schema_version': 1,
             'occurred_at': datetime.now(timezone.utc).isoformat(),
             'source_id': source_id,
+            'source': ({
+                'name': source.name,
+                'rss_url': source.rss_url,
+                'site_url': source.site_url,
+            } if source is not None else None),
             'article_ids': article_ids,
             'news': [article.model_dump(mode='json') for article in articles],
         }

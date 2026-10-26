@@ -11,6 +11,7 @@ from sqlalchemy import select
 from src.infra.db_engine import get_connection
 from src.infra.models.public import sources
 from src.infra.repositories.news import NewsRepository
+from src.infra.repositories.sources import SourcesRepository
 from src.infra.repositories.outbox import OutboxRepository
 from src.infra.schemas.news import News
 from src.infra.schemas.sources import Source
@@ -55,6 +56,7 @@ class NewsService:
             return
         self._source_cache = defaultdict(set)
         self._news_repository = NewsRepository()
+        self._sources_repository = SourcesRepository()
         self._outbox_repository = OutboxRepository()
         self._connection_factory = get_connection
 
@@ -64,13 +66,16 @@ class NewsService:
     async def add_news(self, source_id: int, article: News) -> bool:
         """Commit a new article; return False for an existing external ID."""
         async with self._connection_factory() as connection:
+            source = await self._sources_repository.get_by_id(connection, source_id)
+            if source is None:
+                raise ValueError(f"Unknown news source: {source_id}")
             article_id = await self._news_repository.add(
                 connection, source_id, article
             )
             if article_id is None:
                 return False
             await self._outbox_repository.enqueue_batch(
-                connection, source_id, [article_id], [article]
+                connection, source_id, [article_id], [article], source
             )
         return True
 
@@ -119,7 +124,7 @@ class NewsService:
             ]
             if inserted:
                 await self._outbox_repository.enqueue_batch(
-                    connection, source.id, inserted_ids, inserted
+                    connection, source.id, inserted_ids, inserted, source
                 )
             await self._news_repository.set_active_ids(
                 connection, source.id, new_ids
